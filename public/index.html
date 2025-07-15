@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Deno Text Editor</title>
+
+    <style>
+        :root {
+            --bg-color: #f9f9f9;
+            --text-color: #222;
+            --textarea-bg: white;
+            --button-bg: #444;
+            --button-hover-bg: #666;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+        }
+
+        textarea {
+            background-color: var(--textarea-bg);
+        }
+
+        body.dark {
+            --bg-color: #121212;
+            --text-color: #eee;
+            --textarea-bg: #1e1e1e;
+            --button-bg: #333;
+            --button-hover-bg: #555;
+        }        
+
+        body {
+            font-family: sans-serif;
+            margin: 1rem;
+            background-color: #f9f9f9;
+            color: #222;
+        }
+    
+        textarea {
+            font-family: monospace;
+            font-size: 1rem;
+            line-height: 1.5;
+            padding: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+            width: 100%;
+            height: 80vh;
+            color: var(--text-color);
+        }
+
+        .text-areas {
+            display: flex;
+            flex-direction: row;
+        }
+    
+        button {
+            margin-top: 0.5rem;
+            margin-right: 0.5rem;
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            border-radius: 4px;
+            border: none;
+            background-color: #444;
+            color: white;
+            cursor: pointer;
+        }
+    
+        button:hover {
+            background-color: #666;
+        }
+
+        #word-counter {
+            margin-top: 0.5rem;
+            font-size: 0.9rem;
+            color: #555;
+        }
+
+        #saveStatus {
+            margin-top: 0.25rem;
+            font-size: 0.8rem;
+            color: #888;
+        }
+    </style>
+
+</head>
+
+<body>
+    <h1>Simple Text Editor</h1>
+    <div class="text-areas">
+        <div id="original-container">
+            <h3>Original Version</h3>
+            <textarea id="original" rows="10" cols="80" style="width: 100%; height: 80vh;"></textarea>
+            <div id="word-counter">Words: 0 | Chars: 0</div>
+            <div id="saveStatus">Last saved: never</div>
+        </div>
+    
+        <div id="comparison-container">
+            <h3>Comparison</h3>
+            <textarea id="comparison" rows="10" cols="80" style="width: 100%; height: 80vh;"></textarea>
+        </div>
+    
+    </div>
+
+    <div id="diff-container">
+        <h3>Diff output</h3>
+        <div id="diffDisplay"></div>
+    </div>
+
+
+    <button id="clearBtn">Clear</button>
+    <button id="saveFileBtn">Save as File</button>
+    <input type="file" id="fileInput" accept=".txt" style="display:none" />
+    <button id="loadBtn">Load from File</button>
+    <button id="loadComparisonBtn">Load Comparison</button> 
+    <button id="compareBtn">Compare</button>
+    <button id="darkModeBtn">Toggle Dark Mode</button>
+
+    <script>
+        const devFlag = true;    
+        const textarea = document.querySelector("textarea");
+        const saveStatus = document.getElementById("saveStatus");
+        const darkModeToggle = document.getElementById("darkModeBtn");
+        const clearButton = document.getElementById("clearBtn");
+        const saveButton = document.getElementById("saveFileBtn");
+        const loadButton = document.getElementById("loadBtn");
+        const loadComparisonButton = document.getElementById("loadComparisonBtn");
+        const comparisonTextarea = document.getElementById("comparison");
+        const compareButton = document.getElementById("compareBtn");
+        const fileInput = document.getElementById("fileInput");
+        const original = document.getElementById("original");
+        const diffWords = document.getElementById("diffDisplay");
+
+        var loadTarget = "original";
+
+        const setTheme = () => {
+            const mode = localStorage.getItem("theme") || "";
+            if (mode == "dark") {
+                document.body.classList.add("dark");
+            } else {
+                document.body.classList.remove("dark");
+            }
+        };
+
+        const updateWordCount = (text) => {
+            const wordCount = document.getElementById("word-counter");
+            const words = text.trim().split(/\s+/).filter(Boolean).length;
+            const chars = text.length;
+            wordCount.textContent = `Words: ${words} | Characters: ${chars}`;
+        };     
+
+        const updateSaveStatus = () => {
+            const now = new Date();
+            const time = now.toLocaleTimeString();
+            saveStatus.textContent = `Last saved: ${time}`;
+        };
+
+        const clearSaveStatus = () => {
+            saveStatus.textContent = "Last saved: --:--:--";
+        }
+
+        // Load saved text on page load
+        textarea.value = localStorage.getItem("savedText") || "";
+        updateWordCount(textarea.value);
+        setTheme();
+
+        textarea.addEventListener("input", () => {
+            // Save text on every input
+            const text = textarea.value;
+            localStorage.setItem("savedText", text);
+            
+            if (text != "") {
+                updateSaveStatus();
+            }
+
+            updateWordCount(text);
+        });
+
+        clearButton.addEventListener("click", () => {
+            const textarea = document.querySelector("textarea");
+            textarea.value = "";
+            localStorage.setItem("savedText", "");
+            if (devFlag) {
+                console.log("LS: ", localStorage);
+            }
+
+            updateWordCount(textarea.value);
+            clearSaveStatus();
+        });
+
+        saveButton.addEventListener("click", () => {
+            const textarea = document.querySelector("textarea");
+            const text = textarea.value;
+            const blob = new Blob([text], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "my-notes.txt";
+            a.click();
+
+            URL.revokeObjectURL(url); // Clean up
+        });
+
+        loadButton.addEventListener("click", () => {
+            // 'clicking' the input of type 'file' opens the browse dialog
+            loadTarget = "original";
+            fileInput.click();
+        });
+
+        loadComparisonButton.addEventListener("click", () => {
+            loadTarget = "comparison";
+            fileInput.click();
+        });
+
+
+
+        fileInput.addEventListener("change", () => {
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                const targetArea = (loadTarget == "original") ? textarea : comparisonTextarea;
+
+                if (loadTarget == "original") {
+                    updateWordCount(targetArea.value);
+                    updateSaveStatus();
+                }
+
+                targetArea.value = reader.result;
+                localStorage.setItem(loadTarget, targetArea.value);
+            };
+            reader.readAsText(file);
+        });
+
+        compareButton.addEventListener("click", () => {
+            const diff = Diff.diffWords(textarea.value, comparisonTextarea.value);
+            diffWords.innerHTML = diff
+                .map(part => {
+                    const color = part.added ? 'lightgreen' :
+                                    part.removed ? 'salmon' : 'transparent';
+                    return `<span style="background-color:${color}">${part.value}</span>`;
+                })
+                .join('');
+        });
+
+        darkModeToggle.addEventListener("click", () => {
+            const isDark = document.body.classList.toggle("dark");
+            localStorage.setItem("theme", isDark ? "dark" : "light"); 
+        });
+
+</script>
+
+
+</body>
+
+<script src="https://cdn.jsdelivr.net/npm/diff@5.1.0/dist/diff.min.js"></script>
+</html>
